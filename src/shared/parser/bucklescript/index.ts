@@ -94,5 +94,33 @@ export function parseErrors(bsbOutput: string): { [key: string]: types.Diagnosti
     if (!parsedDiagnostics[fileUri]) { parsedDiagnostics[fileUri] = []; }
     parsedDiagnostics[fileUri].push(diagnostic);
   }
+
+  // Catch errors from external preprocessors
+  let rePreprocessorErrors = /File "(.*)", line (\d*), characters (\d*)-(\d*):.*\nError: (?:\d+:)? (.*)\n/;
+  if ((errorMatch = rePreprocessorErrors.exec(bsbOutput))) {
+    const fileUri = "file://" + errorMatch[1];
+    const startLine = Number(errorMatch[2]) - 1;
+    const endLine = Number(errorMatch[2]) - 1;
+    const startCharacter = Number(errorMatch[3]);
+    const endCharacter = Number(errorMatch[4]);
+    const message = errorMatch[5].trim();
+    const severity = /^Warning number \d+/.exec(errorMatch[0])
+      ? types.DiagnosticSeverity.Warning
+      : types.DiagnosticSeverity.Error;
+
+    const diagnostic: types.Diagnostic = createDiagnostic(
+      message,
+      startCharacter,
+      startLine,
+      endCharacter,
+      endLine,
+      severity
+    );
+    if (!parsedDiagnostics[fileUri]) {
+      parsedDiagnostics[fileUri] = [];
+    }
+    parsedDiagnostics[fileUri].push(diagnostic);
+  }
+
   return parsedDiagnostics;
 }

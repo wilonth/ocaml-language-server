@@ -46,6 +46,17 @@ export default class Analyzer implements rpc.Disposable {
 
   public refreshWithKind(syncKind: server.TextDocumentSyncKind): (id: types.TextDocumentIdentifier) => Promise<void> {
     return async (id) => {
+      
+      if (syncKind === server.TextDocumentSyncKind.Full) {
+        const document = await command.getTextDocument(this.session, id);
+        if (null != document) await this.session.merlin.sync(merlin.Sync.tell("start", "end", document.getText()), id);
+      }
+      const errors = await this.session.merlin.query(merlin.Query.errors(), id);
+      if (errors.class !== "return") return;
+      const diagnostics: types.Diagnostic[] = [];
+      for (const report of errors.value) diagnostics.push(await merlin.IErrorReport.intoCode(this.session, id, report));
+      this.session.connection.sendDiagnostics({ diagnostics, uri: id.uri });
+    
 
       const bsbEnabled = this.session.settings.reason.bsb.enabled;
 
@@ -77,18 +88,6 @@ export default class Analyzer implements rpc.Disposable {
           this.session.connection.sendDiagnostics({ diagnostics: this.bsbDiagnostics[fileUri], uri: fileUri });
           if (this.bsbDiagnostics[fileUri].length === 0) { delete this.bsbDiagnostics[fileUri]; }
         });
-      }
-
-      if (!bsbEnabled || syncKind !== server.TextDocumentSyncKind.Full || Object.keys(this.bsbDiagnostics).length === 0) {
-        if (syncKind === server.TextDocumentSyncKind.Full) {
-          const document = await command.getTextDocument(this.session, id);
-          if (null != document) await this.session.merlin.sync(merlin.Sync.tell("start", "end", document.getText()), id);
-        }
-        const errors = await this.session.merlin.query(merlin.Query.errors(), id);
-        if (errors.class !== "return") return;
-        const diagnostics: types.Diagnostic[] = [];
-        for (const report of errors.value) diagnostics.push(await merlin.IErrorReport.intoCode(this.session, id, report));
-        this.session.connection.sendDiagnostics({ diagnostics, uri: id.uri });
       }
     };
   }
